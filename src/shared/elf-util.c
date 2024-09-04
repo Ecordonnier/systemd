@@ -195,6 +195,7 @@ static int frame_callback(Dwfl_Frame *frame, void *userdata) {
 
         pc_adjusted = pc - (is_activation ? 0 : 1);
 
+        log_warning("frame_callback 198");
         module = sym_dwfl_addrmodule(c->dwfl, pc_adjusted);
         if (module) {
                 Dwarf_Addr start, bias = 0;
@@ -216,18 +217,24 @@ static int frame_callback(Dwfl_Frame *frame, void *userdata) {
                                         a = sym_dwarf_attr_integrate(s, DW_AT_MIPS_linkage_name, &space);
                                         if (!a)
                                                 a = sym_dwarf_attr_integrate(s, DW_AT_linkage_name, &space);
-                                        if (a)
+                                        if (a) {
                                                 symbol = sym_dwarf_formstring(a);
-                                        if (!symbol)
+                                                log_warning("formstring symbol: %s", symbol);
+                                        }
+                                        if (!symbol) {
                                                 symbol = sym_dwarf_diename(s);
+                                                log_warning("dwarf_diename symbol: %s", symbol);
+                                        }
 
                                         if (symbol)
                                                 break;
                                 }
                 }
 
-                if (!symbol)
+                if (!symbol) {
                         symbol = sym_dwfl_module_addrname(module, pc_adjusted);
+                        log_warning("symbol module_addrname: %s", symbol);
+                 }
 
                 fname = sym_dwfl_module_info(module, NULL, &start, NULL, NULL, NULL, NULL, NULL);
                 module_offset = pc - start;
@@ -244,6 +251,7 @@ static int thread_callback(Dwfl_Thread *thread, void *userdata) {
         StackContext *c = ASSERT_PTR(userdata);
         pid_t tid;
 
+        log_warning("enter thread_callback");
         assert(thread);
 
         if (c->n_thread >= THREADS_MAX)
@@ -255,8 +263,11 @@ static int thread_callback(Dwfl_Thread *thread, void *userdata) {
         c->n_frame = 0;
 
         if (c->m.f) {
+                log_warning("c->m.f true");
                 tid = sym_dwfl_thread_tid(thread);
                 fprintf(c->m.f, "Stack trace of thread " PID_FMT ":\n", tid);
+        } else {
+                log_warning("c->m.f false");
         }
 
         if (sym_dwfl_thread_getframes(thread, frame_callback, c) < 0)
@@ -454,10 +465,12 @@ static int parse_buildid(Dwfl_Module *mod, Elf *elf, const char *name, StackCont
         assert(name);
         assert(c);
 
+        log_warning("enter parse_buildid\n");
         if (mod)
                 id_len = sym_dwfl_module_build_id(mod, &id, &id_vaddr);
         else
                 id_len = sym_dwelf_elf_gnu_build_id(elf, (const void **)&id);
+        log_warning("parse_buildid id: %s\n", id);
         if (id_len <= 0) {
                 /* If we don't find a build-id, note it in the journal message, and try
                  * anyway to find the package metadata. It's unlikely to have the latter
@@ -501,6 +514,7 @@ static int module_callback(Dwfl_Module *mod, void **userdata, const char *name, 
         if (r < 0)
                 return DWARF_CB_ABORT;
 
+        log_warning("name=%s", name);
         /* The .note.package metadata is more difficult. From the module, we need to get a reference
          * to the ELF object first. We might be lucky and just get it from elfutils. */
         elf = sym_dwfl_module_getelf(mod, &bias);
@@ -746,6 +760,7 @@ int parse_elf_object(int fd, const char *executable, bool fork_disable_dump, cha
         _cleanup_free_ char *buf = NULL;
         int r;
 
+        log_warning("enter parse_elf_object");
         assert(fd >= 0);
 
         r = dlopen_dw();
@@ -778,11 +793,13 @@ int parse_elf_object(int fd, const char *executable, bool fork_disable_dump, cha
          * bound since the core files have an upper size limit. It's also not doing any
          * system call or interacting with the system in any way, besides reading from
          * the file descriptor and writing into these four pipes. */
+        log_warning("before fork parse_elf");
+        //r = 0;
         r = safe_fork_full("(sd-parse-elf)",
                            NULL,
                            (int[]){ fd, error_pipe[1], return_pipe[1], json_pipe[1] },
                            4,
-                           FORK_RESET_SIGNALS|FORK_CLOSE_ALL_FDS|FORK_NEW_MOUNTNS|FORK_MOUNTNS_SLAVE|FORK_NEW_USERNS|FORK_WAIT|FORK_REOPEN_LOG,
+                           FORK_RESET_SIGNALS|FORK_CLOSE_ALL_FDS|FORK_NEW_MOUNTNS|FORK_MOUNTNS_SLAVE|FORK_NEW_USERNS|FORK_WAIT|FORK_REOPEN_LOG|FORK_LOG,
                            NULL);
         if (r < 0) {
                 if (r == -EPROTO) { /* We should have the errno from the child, but don't clobber original error */
@@ -800,6 +817,7 @@ int parse_elf_object(int fd, const char *executable, bool fork_disable_dump, cha
                 return r;
         }
         if (r == 0) {
+                log_warning("r==0");
                 /* We want to avoid loops, given this can be called from systemd-coredump */
                 if (fork_disable_dump) {
                         r = RET_NERRNO(prctl(PR_SET_DUMPABLE, 0));
@@ -807,6 +825,7 @@ int parse_elf_object(int fd, const char *executable, bool fork_disable_dump, cha
                                 goto child_fail;
                 }
 
+                log_warning("before parse_elf");
                 r = parse_elf(fd, executable, ret ? &buf : NULL, ret_package_metadata ? &package_metadata : NULL);
                 if (r < 0)
                         goto child_fail;

@@ -774,6 +774,7 @@ static int submit_coredump(
                 struct iovec_wrapper *iovw,
                 int input_fd) {
 
+        log_warning("enter submit_coredump");
         _cleanup_(json_variant_unrefp) JsonVariant *json_metadata = NULL;
         _cleanup_close_ int coredump_fd = -EBADF, coredump_node_fd = -EBADF;
         _cleanup_free_ char *filename = NULL, *coredump_data = NULL;
@@ -822,15 +823,19 @@ static int submit_coredump(
         if (r < 0)
                 return log_error_errno(r, "Failed to drop privileges: %m");
 
+        log_warning("before calling parse_elf_object 825");
         if (written) {
+                log_warning("written is true");
                 /* Try to get a stack trace if we can */
                 if (coredump_size > arg_process_size_max)
-                        log_debug("Not generating stack trace: core size %"PRIu64" is greater "
+                        log_warning("Not generating stack trace: core size %"PRIu64" is greater "
                                   "than %"PRIu64" (the configured maximum)",
                                   coredump_size, arg_process_size_max);
                 else if (coredump_fd >= 0) {
+                        log_warning("coredump_fd>=0");
                         bool skip = startswith(context->meta[META_COMM], "systemd-coredum"); /* COMM is 16 bytes usually */
 
+                        log_warning("before calling parse_elf_object");
                         (void) parse_elf_object(coredump_fd,
                                                 context->meta[META_EXE],
                                                 /* fork_disable_dump= */ skip, /* avoid loops */
@@ -991,6 +996,7 @@ static int save_context(Context *context, const struct iovec_wrapper *iovw) {
         context->is_pid1 = streq(context->meta[META_ARGV_PID], "1") || streq_ptr(unit, SPECIAL_INIT_SCOPE);
         context->is_journald = streq_ptr(unit, SPECIAL_JOURNALD_SERVICE);
 
+        log_warning("save_context return success");
         return 0;
 }
 
@@ -1288,6 +1294,7 @@ static int gather_pid_metadata_from_procfs(struct iovec_wrapper *iovw, Context *
         if (read_full_virtual_file(p, &t, NULL) >= 0)
                 (void) iovw_put_string_field_free(iovw, "COREDUMP_PROC_MOUNTINFO=", t);
 
+        log_warning("before procfs_file_alloca");
         /* We attach /proc/auxv here. ELF coredumps also contain a note for this (NT_AUXV), see elf(5). */
         p = procfs_file_alloca(pid, "auxv");
         if (read_full_virtual_file(p, &t, &size) >= 0) {
@@ -1320,6 +1327,7 @@ static int gather_pid_metadata_from_procfs(struct iovec_wrapper *iovw, Context *
         if (get_process_environ(pid, &t) >= 0)
                 (void) iovw_put_string_field_free(iovw, "COREDUMP_ENVIRON=", t);
 
+        log_warning("before save_context");
         /* we successfully acquired all metadata */
         return save_context(context, iovw);
 }
@@ -1523,7 +1531,7 @@ static int forward_coredump_to_container(Context *context) {
 
                 r = gather_pid_metadata_from_procfs(iovw, &child_context);
                 if (r < 0) {
-                        log_debug_errno(r, "Failed to gather metadata from procfs: %m");
+                        log_warning_errno(r, "Failed to gather metadata from procfs: %m");
                         _exit(EXIT_FAILURE);
                 }
 
@@ -1560,6 +1568,7 @@ static int process_kernel(int argc, char* argv[]) {
         Context context = {};
         int r;
 
+        log_warning("enter process_kernel");
         /* When we're invoked by the kernel, stdout/stderr are closed which is dangerous because the fds
          * could get reallocated. To avoid hard to debug issues, let's instead bind stdout/stderr to
          * /dev/null. */
@@ -1567,7 +1576,7 @@ static int process_kernel(int argc, char* argv[]) {
         if (r < 0)
                 return log_error_errno(r, "Failed to connect stdout/stderr to /dev/null: %m");
 
-        log_debug("Processing coredump received from the kernel...");
+        log_warning("Processing coredump received from the kernel...");
 
         iovw = iovw_new();
         if (!iovw)
@@ -1578,15 +1587,21 @@ static int process_kernel(int argc, char* argv[]) {
         if (r < 0)
                 return r;
 
+
+        log_warning("line 1584...");
         /* Collect the rest of the process metadata retrieved from the runtime */
         r = gather_pid_metadata_from_procfs(iovw, &context);
-        if (r < 0)
+        if (r < 0) {
+                log_warning_errno(r, "return error after gather_pid_metadata_from_procfs %m");
                 return r;
+        }
+        log_warning("line 1594...");
 
         if (!context.is_journald)
                 /* OK, now we know it's not the journal, hence we can make use of it now. */
-                log_set_target_and_open(LOG_TARGET_JOURNAL_OR_KMSG);
+                log_set_target_and_open(LOG_TARGET_KMSG);
 
+        log_warning("line 1600...");
         r = in_same_namespace(getpid_cached(), context.pid, NAMESPACE_PID);
         if (r < 0)
                 log_debug_errno(r, "Failed to check pidns of crashing process, ignoring: %m");
@@ -1598,6 +1613,7 @@ static int process_kernel(int argc, char* argv[]) {
                         return 0;
         }
 
+        log_warning("line 1606...");
         /* If this is PID 1 disable coredump collection, we'll unlikely be able to process
          * it later on.
          *
@@ -1609,10 +1625,12 @@ static int process_kernel(int argc, char* argv[]) {
                 disable_coredumps();
         }
 
+
+        log_warning("line 1617...");
         (void) iovw_put_string_field(iovw, "MESSAGE_ID=", SD_MESSAGE_COREDUMP_STR);
         (void) iovw_put_string_field(iovw, "PRIORITY=", STRINGIFY(LOG_CRIT));
 
-        if (context.is_journald || context.is_pid1)
+        //if (context.is_journald || context.is_pid1)
                 return submit_coredump(&context, iovw, STDIN_FILENO);
 
         return send_iovec(iovw, STDIN_FILENO);
@@ -1694,8 +1712,8 @@ static int run(int argc, char *argv[]) {
         /* Ignore all parse errors */
         (void) parse_config();
 
-        log_debug("Selected storage '%s'.", coredump_storage_to_string(arg_storage));
-        log_debug("Selected compression %s.", yes_no(arg_compress));
+        log_warning("Selected storage '%s'.", coredump_storage_to_string(arg_storage));
+        log_warning("Selected compression %s.", yes_no(arg_compress));
 
         r = sd_listen_fds(false);
         if (r < 0)

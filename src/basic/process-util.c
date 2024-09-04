@@ -796,7 +796,7 @@ int wait_for_terminate_and_check(const char *name, pid_t pid, WaitFlags flags) {
         if (!name) {
                 r = pid_get_comm(pid, &buffer);
                 if (r < 0)
-                        log_debug_errno(r, "Failed to acquire process name of " PID_FMT ", ignoring: %m", pid);
+                        log_warning_errno(r, "Failed to acquire process name of " PID_FMT ", ignoring: %m", pid);
                 else
                         name = buffer;
         }
@@ -810,9 +810,9 @@ int wait_for_terminate_and_check(const char *name, pid_t pid, WaitFlags flags) {
         if (status.si_code == CLD_EXITED) {
                 if (status.si_status != EXIT_SUCCESS)
                         log_full(flags & WAIT_LOG_NON_ZERO_EXIT_STATUS ? LOG_ERR : LOG_DEBUG,
-                                 "%s failed with exit status %i.", strna(name), status.si_status);
+                                 "%s failed foobar with exit status %i.", strna(name), status.si_status);
                 else
-                        log_debug("%s succeeded.", name);
+                        log_warning("%s succeeded.", name);
 
                 return status.si_status;
 
@@ -1454,7 +1454,7 @@ int safe_fork_full(
                         if (pid < 0)
                                 return log_full_errno(prio, errno, "Failed to fork off '%s': %m", strna(name));
                         if (pid > 0) {
-                                log_debug("Successfully forked off intermediary '%s' as PID " PID_FMT ".", strna(name), pid);
+                                log_warning("Successfully forked off intermediary '%s' as PID " PID_FMT ".", strna(name), pid);
                                 return 1; /* return in the parent */
                         }
 
@@ -1477,7 +1477,7 @@ int safe_fork_full(
                         _exit(EXIT_SUCCESS);
 
                 /* We are in the parent process */
-                log_debug("Successfully forked off '%s' as PID " PID_FMT ".", strna(name), pid);
+                log_warning("Successfully forked off '%s' as PID " PID_FMT ".", strna(name), pid);
 
                 if (flags & FORK_WAIT) {
                         if (block_all) {
@@ -1555,7 +1555,7 @@ int safe_fork_full(
                         /* Parent is in a different PID namespace. */;
                 else if (ppid != original_pid) {
                         int sig = fork_flags_to_signal(flags);
-                        log_debug("Parent died early, raising %s.", signal_to_string(sig));
+                        log_warning("Parent died early, raising %s.", signal_to_string(sig));
                         (void) raise(sig);
                         _exit(EXIT_FAILURE);
                 }
@@ -1836,7 +1836,7 @@ int setpriority_closest(int priority) {
 
         /* We are already less nice than limit allows us */
         if (current < limit) {
-                log_debug("Cannot raise nice level, permissions and the resource limit do not allow it.");
+                log_warning("Cannot raise nice level, permissions and the resource limit do not allow it.");
                 return 0;
         }
 
@@ -1844,7 +1844,7 @@ int setpriority_closest(int priority) {
         if (setpriority(PRIO_PROCESS, 0, limit) < 0)
                 return -errno;
 
-        log_debug("Cannot set requested nice level (%i), used next best (%i).", priority, limit);
+        log_warning("Cannot set requested nice level (%i), used next best (%i).", priority, limit);
         return 0;
 }
 
