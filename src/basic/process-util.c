@@ -1394,12 +1394,14 @@ int safe_fork_full(
                 ForkFlags flags,
                 pid_t *ret_pid) {
 
+        log_warning("safe_fork_full 1397 1397\n");
         pid_t original_pid, pid;
         sigset_t saved_ss, ss;
         _unused_ _cleanup_(restore_sigsetp) sigset_t *saved_ssp = NULL;
         bool block_signals = false, block_all = false, intermediary = false;
         int prio, r;
 
+        log_warning("safe_fork_full 1403");
         assert(!FLAGS_SET(flags, FORK_DETACH) || !ret_pid);
         assert(!FLAGS_SET(flags, FORK_DETACH|FORK_WAIT));
 
@@ -1410,6 +1412,7 @@ int safe_fork_full(
 
         original_pid = getpid_cached();
 
+        log_warning("safe_fork_full 1413");
         if (flags & FORK_FLUSH_STDIO) {
                 fflush(stdout);
                 fflush(stderr); /* This one shouldn't be necessary, stderr should be unbuffered anyway, but let's better be safe than sorry */
@@ -1431,6 +1434,7 @@ int safe_fork_full(
                 block_signals = true;
         }
 
+        log_warning("safe_fork_full 1434");
         if (block_signals) {
                 if (sigprocmask(SIG_SETMASK, &ss, &saved_ss) < 0)
                         return log_full_errno(prio, errno, "Failed to set signal mask: %m");
@@ -1462,14 +1466,16 @@ int safe_fork_full(
                 }
         }
 
+        log_warning("safe_fork_full 1466");
         if ((flags & (FORK_NEW_MOUNTNS|FORK_NEW_USERNS)) != 0)
                 pid = raw_clone(SIGCHLD|
                                 (FLAGS_SET(flags, FORK_NEW_MOUNTNS) ? CLONE_NEWNS : 0) |
                                 (FLAGS_SET(flags, FORK_NEW_USERNS) ? CLONE_NEWUSER : 0));
         else
                 pid = fork();
-        if (pid < 0)
-                return log_full_errno(prio, errno, "Failed to fork off '%s': %m", strna(name));
+        if (pid < 0) {
+                log_warning("return error 1477");
+                return log_full_errno(prio, errno, "Failed to fork off '%s': %m", strna(name)); }
         if (pid > 0) {
 
                 /* If we are in the intermediary process, exit now */
@@ -1488,15 +1494,23 @@ int safe_fork_full(
                         }
 
                         r = wait_for_terminate_and_check(name, pid, (flags & FORK_LOG ? WAIT_LOG : 0));
-                        if (r < 0)
+                        if (r < 0) {
+                                log_warning("return error 1498");
                                 return r;
-                        if (r != EXIT_SUCCESS) /* exit status > 0 should be treated as failure, too */
+                        }
+                        if (r != EXIT_SUCCESS) /* exit status > 0 should be treated as failure, too */ {
+                                log_warning("return error 1501");
                                 return -EPROTO;
+                        }
                 }
 
-                if (ret_pid)
+                log_warning("safe_fork_full 1500");
+                if (ret_pid) {
+                        log_warning("safe_fork_full 1508");
                         *ret_pid = pid;
+                }
 
+                log_warning("safe_fork_full return 1 1512");
                 return 1;
         }
 
@@ -1512,6 +1526,7 @@ int safe_fork_full(
                 log_settle_target();
         }
 
+        log_warning("safe_fork_full 1527");
         if (name) {
                 r = rename_process(name);
                 if (r < 0)

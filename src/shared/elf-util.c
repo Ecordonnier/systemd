@@ -656,6 +656,7 @@ static int parse_elf(int fd, const char *executable, char **ret, JsonVariant **r
         GElf_Ehdr elf_header;
         int r;
 
+        log_warning("enter parse_elf function\n");
         assert(fd >= 0);
 
         if (lseek(fd, 0, SEEK_SET) < 0)
@@ -799,9 +800,11 @@ int parse_elf_object(int fd, const char *executable, bool fork_disable_dump, cha
                            NULL,
                            (int[]){ fd, error_pipe[1], return_pipe[1], json_pipe[1] },
                            4,
-                           FORK_RESET_SIGNALS|FORK_CLOSE_ALL_FDS|FORK_NEW_MOUNTNS|FORK_MOUNTNS_SLAVE|FORK_NEW_USERNS|FORK_WAIT|FORK_REOPEN_LOG|FORK_LOG,
+                           FORK_RESET_SIGNALS|FORK_WAIT|FORK_LOG,
                            NULL);
+        log_warning("after fork");
         if (r < 0) {
+                log_warning("fork r<0");
                 if (r == -EPROTO) { /* We should have the errno from the child, but don't clobber original error */
                         int e, k;
 
